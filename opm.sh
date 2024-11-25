@@ -23,15 +23,15 @@ OPM_FIFO_OUT="$OPM_ROOT/opmfifo.out"
 # Functions
 
 print_header() {
-    "$BUSYBOX" echo "====================================="
-    "$BUSYBOX" echo "          OPM Package Manager        "
-    "$BUSYBOX" echo "          By Oddbyte                 "
-    "$BUSYBOX" echo "====================================="
+    echo "====================================="
+    echo "          OPM Package Manager        "
+    echo "          By Oddbyte                 "
+    echo "====================================="
 }
 
 usage() {
     print_header
-    "$BUSYBOX" cat << EOF
+    "$BUSYBOX" cat <<EOF
 
 Usage:
     opm [command] [options]
@@ -49,9 +49,9 @@ Commands:
     update                              Update OPM
     show [package]                      Show package details
     postinstall [package]               Run post-install script for a package
-
 EOF
 }
+
 
 list_repos() {
     print_header
@@ -142,10 +142,9 @@ install_package() {
                     return 1
                 fi
                 check_dependencies
-                supported_extensions=("tar" "zip" "tar.gz" "gz" "xz")
+
                 PACKAGE_FOUND=0
-                
-                for ext in "${supported_extensions[@]}"; do
+                for ext in tar zip tar.gz gz xz; do
                     PACKAGE_DATA_URL="$REPO_URL/packagedata/$PACKAGE.$ext"
                     $BUSYBOX wget -qO "$OPM_DATA/$PACKAGE.$ext" "$PACKAGE_DATA_URL"
                     if [ $? -eq 0 ]; then
