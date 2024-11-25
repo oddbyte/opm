@@ -1,6 +1,6 @@
 # Odd Package Manager - A rootless package manager, made to work with as little as possible
 ## Why?
-I wanted to make a package manager that would support as many linux environments as possible, including embeded devices, or containers where you cannot get root.
+I wanted to make a package manager that would support as many linux environments as possible, including embedded devices, or containers where you cannot get root.
 ## Installation
 ```bash
 curl -sSL opm.oddbyte.dev/opminstall.sh > opminstall.sh && bash opminstall.sh
