@@ -28,4 +28,5 @@ Commands:
     reinstall | upgrade [package]       Reinstall or upgrade a package
     update                              Update OPM
     show [package]                      Show package details
+    postinstall [package]               Run post-install script for a package
 ```
