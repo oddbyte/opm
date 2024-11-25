@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!bash
 
 # OPM Installer
 
@@ -15,7 +15,11 @@ OPM_ROOT=${OPM_ROOT:-$HOME/.opm}
 echo "OPM will be installed to: $OPM_ROOT"
 
 # Find BusyBox in the same directory as the installer script
-SCRIPT_DIR=$(dirname "$(realpath "$0")")
+SCRIPT_PATH="$0"
+if [[ "$SCRIPT_PATH" != /* ]]; then
+  SCRIPT_PATH="$PWD/$SCRIPT_PATH"
+fi
+SCRIPT_DIR="${SCRIPT_PATH%/*}"
 BUSYBOX="$SCRIPT_DIR/busybox"
 
 # Function to download BusyBox using curl or wget
@@ -44,7 +48,7 @@ fi
 # Make BusyBox executable
 if [ -f "$BUSYBOX" ]; then
     chmod 755 "$BUSYBOX"
-    echo "BusyBox is ready and executable."
+    "$BUSYBOX" echo "BusyBox is ready and executable."
 else
     echo "Failed to prepare BusyBox. Please ensure it's available at $BUSYBOX."
     exit 1
@@ -77,6 +81,29 @@ if [ ! -f "$OPM_ROOT/opm.sh" ]; then
     exit 1
 fi
 
+# Read the first line of opm.sh
+FIRST_LINE=$("$BUSYBOX" head -n 1 "$OPM_ROOT/opm.sh")
+
+# Check if the first line is a shebang
+if [[ "$FIRST_LINE" == "#!"* ]]; then
+    # Remove the first line
+    "$BUSYBOX" tail -n +2 "$OPM_ROOT/opm.sh" > "$OPM_ROOT/opm.sh.tmp"
+else
+    # No shebang line, copy the script as is
+    "$BUSYBOX" cp "$OPM_ROOT/opm.sh" "$OPM_ROOT/opm.sh.tmp"
+fi
+
+# Add the new shebang line pointing to BusyBox ash
+"$BUSYBOX" echo "#!$BUSYBOX ash" > "$OPM_ROOT/opm.sh"
+
+# Append the rest of the script
+"$BUSYBOX" cat "$OPM_ROOT/opm.sh.tmp" >> "$OPM_ROOT/opm.sh"
+
+# Clean up temporary file
+"$BUSYBOX" rm "$OPM_ROOT/opm.sh.tmp"
+
+"$BUSYBOX" echo "Shebang line updated in $OPM_ROOT/opm.sh to '#!$BUSYBOX ash'"
+
 # Make opm.sh executable
 "$BUSYBOX" chmod 755 "$OPM_ROOT/opm.sh"
 
@@ -99,11 +126,11 @@ if ! "$BUSYBOX" grep -Fxq "source $OPM_ROOT/env.sh" ~/.bashrc; then
 fi
 
 # Create default opm-repos file using BusyBox
-echo "Creating default repository list..."
+"$BUSYBOX" echo "Creating default repository list..."
 "$BUSYBOX" echo "https://opm.oddbyte.dev/" > "$OPM_ROOT/opm-repos"
 
-echo ""
-echo "====================================="
-echo "       OPM Installation Complete     "
-echo "====================================="
-echo "Please restart your terminal or run 'source ~/.bashrc' to start using OPM."
+"$BUSYBOX" echo ""
+"$BUSYBOX" echo "====================================="
+"$BUSYBOX" echo "       OPM Installation Complete     "
+"$BUSYBOX" echo "====================================="
+"$BUSYBOX" echo "Please restart your terminal or run 'source ~/.bashrc' to start using OPM."
