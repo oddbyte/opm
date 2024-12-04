@@ -8,25 +8,29 @@ curl -sSL opm.oddbyte.dev/opminstall.sh > opminstall.sh && bash opminstall.sh
 ## Usage
 ```
 opm@oddbyte:~$ opm help
-=====================================
-          OPM Package Manager
-          By Oddbyte
-=====================================
-
-Usage:
-    opm [command] [options]
-
-Commands:
-    help                                Show this help message
-    install | add | i                   Install a package
-    remove | uninstall | delete | rm    Remove a package
-    repos                               List configured repositories
-    addrepo [repo_url]                  Add a repository
-    rmrepo [repo_url]                   Remove a repository
-    list                                List all package names
-    search [query]                      Search packages
-    reinstall | upgrade [package]       Reinstall or upgrade a package
-    update                              Update OPM
-    show [package]                      Show package details
-    postinstall [package]               Run post-install script for a package
+‏
+‏=====================================
+‏          OPM Package Manager
+‏          By Oddbyte
+‏=====================================
+‏
+‏Usage:
+‏    opm [command] [options]
+‏
+‏Commands:
+‏    help                                Show this help message
+‏    install | add | i                   Install a package
+‏    remove | uninstall | delete | rm    Remove a package
+‏    repos                               List configured repositories
+‏    addrepo [repo_url]                  Add a repository
+‏    rmrepo [repo_url]                   Remove a repository
+‏    list                                List all package names
+‏    search [query]                      Search packages
+‏    reinstall [package]                 Reinstalls the package, deleting all data.
+‏    upgrade [package]                   Reinstalls the package, but keeps the config data.
+‏    update                              Update OPM
+‏    show [package]                      Show package details
+‏    postinstall [package]               Run post-install script for a package
+‏    enable [package]                    Enable the package's service
+‏    disable [package]                   Disable the package's service
 ```
