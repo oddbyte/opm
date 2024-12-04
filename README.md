@@ -6,7 +6,7 @@ I wanted to make a package manager that would support as many linux environments
 curl -sSL opm.oddbyte.dev/opminstall.sh > opminstall.sh && sh opminstall.sh
 ```
 You can use `bash`, `sh`, or even `busybox ash` for the installer. Just replace sh with your desired shell.
-You must keep it as a file, or the installation will bork itself because it tries to read from stdin, so using a pipe wont work here.
+You must keep it as a file, because it tries to read from stdin. So using a pipe to pipe the output from curl to sh or bash will break the installer.
 ## Usage
 ```
 opm@oddbyte:~$ opm help
