@@ -3,9 +3,9 @@
 I wanted to make a package manager that would support as many linux environments as possible, including embedded devices, or containers where you cannot get root.
 ## Installation
 ```bash
-curl -sSL opm.oddbyte.dev/opminstall.sh | sh opminstall.sh
+curl -sSL opm.oddbyte.dev/opminstall.sh | sh
 ```
-You can use `bash`, `sh`, or even `busybox ash` for the installer. Just replace bash with your desired shell.
+You can use `bash`, `sh`, or even `busybox ash` for the installer. Just replace sh with your desired shell.
 ## Usage
 ```
 opm@oddbyte:~$ opm help
