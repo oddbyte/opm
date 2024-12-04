@@ -2,18 +2,35 @@
 
 # OPM - Odd Package Manager
 
-# Load environment variables
-if [ -z "$OPM_ROOT" ]; then
-    echo "OPM_ROOT not set. Please source the env.sh file, or rerun with OPM_ROOT=/path/to/opmroot/ opm"
+# Locate the script's directory dynamically
+SCRIPT_PATH="$0"
+case "$SCRIPT_PATH" in
+    /*) SCRIPT_DIR="${SCRIPT_PATH%/*}" ;; # Absolute path
+    *) SCRIPT_DIR="${PWD}/${SCRIPT_PATH%/*}" ;; # Relative path
+esac
+
+# Set OPM_ROOT based on script directory if not already set
+[ -z "$OPM_ROOT" ] && OPM_ROOT="$SCRIPT_DIR"
+ENV_FILE="$OPM_ROOT/env.sh"
+
+# Source the environment file
+if [ -f "$ENV_FILE" ]; then
+    source "$ENV_FILE"
+else
+    echo "Environment file $ENV_FILE not found. Exiting."
     exit 1
 fi
-
-source "$OPM_ROOT/env.sh" # source again just to be sure
 
 # Ensure BusyBox is available
 if [ ! -x "$BUSYBOX" ]; then
     echo "BusyBox not found at $BUSYBOX"
     exit 1
+fi
+
+# Ensure `env.sh` is sourced dynamically
+if ! "$BUSYBOX" grep -Fxq "source $ENV_FILE" ~/.profile; then
+    "$BUSYBOX" echo "Adding source $ENV_FILE to ~/.profile..."
+    "$BUSYBOX" echo "source $ENV_FILE" >> ~/.profile
 fi
 
 OPM_PID_FILE="$OPM_ROOT/opm.pid"
@@ -23,32 +40,37 @@ OPM_FIFO_OUT="$OPM_ROOT/opmfifo.out"
 # Functions
 
 print_header() {
-    echo "====================================="
-    echo "          OPM Package Manager        "
-    echo "          By Oddbyte                 "
-    echo "====================================="
+    echo "‏"
+    echo "‏====================================="
+    echo "‏          OPM Package Manager        "
+    echo "‏          By Oddbyte                 "
+    echo "‏====================================="
 }
 
 usage() {
     print_header
     "$BUSYBOX" cat <<EOF
-
-Usage:
-    opm [command] [options]
-
-Commands:
-    help                                Show this help message
-    install | add | i                   Install a package
-    remove | uninstall | delete | rm    Remove a package
-    repos                               List configured repositories
-    addrepo [repo_url]                  Add a repository
-    rmrepo [repo_url]                   Remove a repository
-    list                                List all package names
-    search [query]                      Search packages
-    reinstall | upgrade [package]       Reinstall or upgrade a package
-    update                              Update OPM
-    show [package]                      Show package details
-    postinstall [package]               Run post-install script for a package
+‏
+‏Usage:
+‏    opm [command] [options]
+‏
+‏Commands:
+‏    help                                Show this help message
+‏    install | add | i                   Install a package
+‏    remove | uninstall | delete | rm    Remove a package
+‏    repos                               List configured repositories
+‏    addrepo [repo_url]                  Add a repository
+‏    rmrepo [repo_url]                   Remove a repository
+‏    list                                List all package names
+‏    search [query]                      Search packages
+‏    reinstall [package]                 Reinstalls the package, deleting all data.
+‏    upgrade [package]                   Reinstalls the package, but keeps the config data.
+‏    update                              Update OPM
+‏    show [package]                      Show package details
+‏    postinstall [package]               Run post-install script for a package
+‏    enable [package]                    Enable the package's service 
+‏    disable [package]                   Disable the package's service
+‏
 EOF
 }
 
@@ -84,9 +106,12 @@ remove_repo() {
 list_packages() {
     print_header
     "$BUSYBOX" echo "Available packages:"
-    "$BUSYBOX" echo "-------------------"
+    "$BUSYBOX" echo "------------------------------------"
+    "$BUSYBOX" echo "-- name -- version -- displayname --"
+    "$BUSYBOX" echo "------------------------------------"
     while read -r REPO_URL; do
         "$BUSYBOX" echo "From repository: $REPO_URL"
+        "$BUSYBOX" echo "------------------------------------"
         PACKAGES_JSON=$($BUSYBOX wget -qO - "$REPO_URL/packages.json")
         if [ $? -ne 0 ]; then
             "$BUSYBOX" echo "Failed to fetch packages from $REPO_URL"
@@ -95,6 +120,7 @@ list_packages() {
         "$BUSYBOX" echo "$PACKAGES_JSON" | while IFS='|' read -r name version displayname; do
             "$BUSYBOX" echo "$name - $version - $displayname"
         done
+        "$BUSYBOX" echo "------------------------------------"
         "$BUSYBOX" echo ""
     done < "$OPM_REPOS_FILE"
 }
@@ -120,7 +146,6 @@ search_packages() {
 
 install_package() {
     PACKAGE="$1"
-    FOUND=0
     while read -r REPO_URL; do
         PACKAGES_JSON=$("$BUSYBOX" wget -qO - "$REPO_URL/packages.json")
         if [ $? -ne 0 ]; then
@@ -146,7 +171,7 @@ install_package() {
                 PACKAGE_FOUND=0
                 for ext in tar zip tar.gz gz xz; do
                     PACKAGE_DATA_URL="$REPO_URL/packagedata/$PACKAGE.$ext"
-                    $BUSYBOX wget -qO "$OPM_DATA/$PACKAGE.$ext" "$PACKAGE_DATA_URL"
+                    $BUSYBOX wget -qO "$OPM_DATA/$PACKAGE.$ext" "$PACKAGE_DATA_URL" 2>/dev/null
                     if [ $? -eq 0 ]; then
                         PACKAGE_FOUND=1
                         PACKAGE_EXT="$ext"
@@ -162,19 +187,24 @@ install_package() {
                 "$BUSYBOX" mkdir -p "$OPM_DATA/$PACKAGE"
                 case "$PACKAGE_EXT" in
                     "tar")
-                        $BUSYBOX tar -xf "$OPM_DATA/$PACKAGE.$PACKAGE_EXT" -C "$OPM_DATA/$PACKAGE.tar"
+                        "$BUSYBOX" mkdir -p "$OPM_DATA/$PACKAGE"
+                        "$BUSYBOX" tar -xf "$OPM_DATA/$PACKAGE.$PACKAGE_EXT" -C "$OPM_DATA/$PACKAGE/"
                         ;;
                     "zip")
-                        $BUSYBOX unzip -o "$OPM_DATA/$PACKAGE.$PACKAGE_EXT" -d "$OPM_DATA/$PACKAGE.zip"
+                        "$BUSYBOX" mkdir -p "$OPM_DATA/$PACKAGE"
+                        "$BUSYBOX" unzip -o "$OPM_DATA/$PACKAGE.$PACKAGE_EXT" -d "$OPM_DATA/$PACKAGE/"
                         ;;
                     "tar.gz")
-                        $BUSYBOX tar -xzf "$OPM_DATA/$PACKAGE.$PACKAGE_EXT" -C "$OPM_DATA/$PACKAGE.tar.gz"
+                        "$BUSYBOX" mkdir -p "$OPM_DATA/$PACKAGE"
+                        "$BUSYBOX" tar -xzf "$OPM_DATA/$PACKAGE.$PACKAGE_EXT" -C "$OPM_DATA/$PACKAGE/"
                         ;;
                     "gz")
-                        $BUSYBOX gunzip -c "$OPM_DATA/$PACKAGE.$PACKAGE_EXT" > "$OPM_DATA/$PACKAGE/${PACKAGE}.gz"
+                        "$BUSYBOX" mkdir -p "$OPM_DATA/$PACKAGE"
+                        "$BUSYBOX" gunzip -c "$OPM_DATA/$PACKAGE.$PACKAGE_EXT" > "$OPM_DATA/$PACKAGE/"
                         ;;
                     "xz")
-                        $BUSYBOX xz -d "$OPM_DATA/$PACKAGE.$PACKAGE_EXT" -c > "$OPM_DATA/$PACKAGE/${PACKAGE}.xz"
+                        "$BUSYBOX" mkdir -p "$OPM_DATA/$PACKAGE"
+                        "$BUSYBOX" xz -d "$OPM_DATA/$PACKAGE.$PACKAGE_EXT" -c > "$OPM_DATA/$PACKAGE/"
                         ;;
                     *)
                         "$BUSYBOX" echo "Could not find the package data. Contact the repo maintainer."
@@ -186,32 +216,39 @@ install_package() {
                 for binary in $OPM_ADD_TO_PATH; do
                     "$BUSYBOX" ln -sf "$PACKAGEDIR/$binary" "$OPM_BIN/$binary"
                 done
+                enable_service "$PACKAGEDIR"
                 "$BUSYBOX" echo "Package $PACKAGE installed successfully."
                 postinstall_package "$PACKAGE"
                 return 0
             fi
         done
-        if [ "$FOUND" -eq 1 ]; then
-            break
-        fi
     done < "$OPM_REPOS_FILE"
-    if [ "$FOUND" -eq 0 ]; then
-        "$BUSYBOX" echo "Package $PACKAGE not found in any configured repository."
-        return 1
-    fi
 }
 
 remove_package() {
     PACKAGE="$1"
+    KEEP_CONFIG="$2"  # Optional second argument to keep config folder (true/false)
+
     if [ -d "$OPM_DATA/$PACKAGE" ]; then
         # Remove symlinks
         parse_opm_file "$OPM_DATA/$PACKAGE.opm"
-        for binary in "${OPM_ADD_TO_PATH[@]}"; do
+
+        # Iterate over binaries listed in OPM_ADD_TO_PATH
+        for binary in $OPM_ADD_TO_PATH; do
             "$BUSYBOX" rm -f "$OPM_BIN/$binary"
         done
-        # Remove package data
-        "$BUSYBOX" rm -rf "$OPM_DATA/$PACKAGE"
+
+        # Remove package data, except for the config folder if KEEP_CONFIG is true
+        if [ "$KEEP_CONFIG" != "true" ]; then
+            "$BUSYBOX" rm -rf "$OPM_DATA/$PACKAGE"  # Remove the entire package data folder
+        else
+            # Keep the config folder but remove everything else
+            "$BUSYBOX" find "$OPM_DATA/$PACKAGE" -mindepth 1 -not -path "$OPM_DATA/$PACKAGE/config*" -exec "$BUSYBOX" rm -rf {} \;
+        fi
+
+        # Remove the package .opm and .zip files
         "$BUSYBOX" rm -f "$OPM_DATA/$PACKAGE.opm" "$OPM_DATA/$PACKAGE.zip"
+        
         "$BUSYBOX" echo "Package $PACKAGE removed successfully."
     else
         "$BUSYBOX" echo "Package $PACKAGE is not installed."
@@ -219,7 +256,7 @@ remove_package() {
 }
 
 reinstall_package() {
-    remove_package "$1"
+    remove_package "$1" "$2"
     install_package "$1"
 }
 
@@ -299,12 +336,12 @@ parse_opm_file() {
                 OPM_PACKAGE_DESC=$("$BUSYBOX" echo "$line" | "$BUSYBOX" cut -d':' -f3 | "$BUSYBOX" xargs)
                 ;;
             "# :opm addtopath:"*)
-                ADDTOPATH_STR=$("$BUSYBOX" echo "$line" | "$BUSYBOX" cut -d':' -f3 | "$BUSYBOX" sed 's/^\[//;s/\]$//')
-                OPM_ADD_TO_PATH=$("$BUSYBOX" echo "$ADDTOPATH_STR" | "$BUSYBOX" tr ',' ' ')
+                ADDTOPATH_STR=$("$BUSYBOX" echo "$line" | "$BUSYBOX" cut -d':' -f3)
+                OPM_ADD_TO_PATH=$("$BUSYBOX" echo "$ADDTOPATH_STR" | "$BUSYBOX" sed 's/,/ /g')
                 ;;
             "# :opm depends:"*)
-                DEPENDS_STR=$("$BUSYBOX" echo "$line" | "$BUSYBOX" cut -d':' -f3 | "$BUSYBOX" xargs)
-                OPM_DEPENDS="$OPM_DEPENDS $("$BUSYBOX" echo "$DEPENDS_STR" | "$BUSYBOX" tr ',' ' ')"
+                DEPENDS_STR=$("$BUSYBOX" echo "$line" | "$BUSYBOX" cut -d':' -f3)
+                OPM_DEPENDS=$("$BUSYBOX" echo "$DEPENDS_STR" | "$BUSYBOX" sed 's/,/ /g')
                 ;;
         esac
     done < "$OPM_FILE"
@@ -312,15 +349,16 @@ parse_opm_file() {
 
 check_dependencies() {
     for dep in $("$BUSYBOX" echo "$OPM_DEPENDS"); do
-        if [ "$dep" == "core" ]; then
-            # Do nothing
+        if [ "$dep" = "core" ]; then
+            # Skip "core" dependency
             continue
         fi
         if [ ! -d "$OPM_DATA/$dep" ]; then
             "$BUSYBOX" echo "Dependency $dep is not installed."
-            read -p "Do you want to install $dep now? [Y/n]: " choice
+            "$BUSYBOX" echo -n "Do you want to install $dep now? [Y/n]: "
+            read choice
             choice=${choice:-Y}
-            if [[ "$choice" =~ ^[Yy]$ ]]; then
+            if echo "$choice" | grep -iq "^y"; then
                 install_package "$dep"
             else
                 "$BUSYBOX" echo "Cannot proceed without installing dependencies."
@@ -328,6 +366,60 @@ check_dependencies() {
             fi
         fi
     done
+}
+
+# Service management functions
+enable_service() {
+    SERVICE_DIR="$1"
+    if [ -f "$SERVICE_DIR/service.sh" ]; then
+        "$BUSYBOX" ln -sf "$SERVICE_DIR/service.sh" "$OPM_ROOT/services/$("$BUSYBOX" basename "$SERVICE_DIR")"
+        "$BUSYBOX" echo "Service $("$BUSYBOX" basename "$SERVICE_DIR") enabled."
+    else
+        "$BUSYBOX" echo "No service.sh found in $SERVICE_DIR."
+    fi
+}
+
+disable_service() {
+    SERVICE_NAME="$1"
+    if [ -L "$OPM_ROOT/services/$SERVICE_NAME" ]; then
+        "$BUSYBOX" rm "$OPM_ROOT/services/$SERVICE_NAME"
+        "$BUSYBOX" echo "Service $SERVICE_NAME disabled."
+    else
+        "$BUSYBOX" echo "Service $SERVICE_NAME not found."
+    fi
+}
+
+start_services() {
+    "$BUSYBOX" echo "Starting all enabled services..."
+    for service in "$OPM_ROOT/services/"*; do
+        if [ -f "$service" ]; then
+            SERVICE_NAME=$("$BUSYBOX" basename "$service")
+            "$BUSYBOX" echo "Starting service: $SERVICE_NAME"
+            packagedir="$OPM_DATA/$SERVICE_NAME/"
+            if [ -f "$packagedir/env.sh" ]; then
+                . "$packagedir/env.sh"
+            fi
+            PACKAGEDIR=$packagedir "$BUSYBOX" ash "$service" || "$BUSYBOX" echo "Error starting service $SERVICE_NAME"
+        fi
+    done
+}
+
+start_service() {
+    PACKAGE="$1"
+    SERVICE_PATH="$OPM_ROOT/services/$PACKAGE"
+
+    if [ -L "$SERVICE_PATH" ] && [ -f "$SERVICE_PATH" ]; then
+        "$BUSYBOX" echo "Starting service: $PACKAGE"
+        PACKAGEDIR="$OPM_DATA/$PACKAGE"
+        export PACKAGEDIR
+        # Source the package's environment if it exists
+        if [ -f "$PACKAGEDIR/env.sh" ]; then
+            . "$PACKAGEDIR/env.sh"
+        fi
+        "$BUSYBOX" ash "$SERVICE_PATH" || "$BUSYBOX" echo "Error starting service $PACKAGE"
+    else
+        "$BUSYBOX" echo "Service $PACKAGE is not enabled or does not exist."
+    fi
 }
 
 update() {
@@ -377,17 +469,17 @@ start_server() {
     "$BUSYBOX" echo "Starting OPM server..."
     # Start the server using BusyBox ash in the background
     "$BUSYBOX" ash "$0" server &
-    SERVER_PID=$!
+    OTHER_OPM_PID=$!
     # Save the PID
-    echo "$SERVER_PID" > "$OPM_PID_FILE"
-    "$BUSYBOX" echo "OPM server started with PID $SERVER_PID"
+    echo "$OTHER_OPM_PID" > "$OPM_PID_FILE"
+    "$BUSYBOX" echo "OPM server started with PID $OTHER_OPM_PID"
 }
 
 # Function to check if server is running
-is_server_running() {
+is_opm_running() {
     if [ -f "$OPM_PID_FILE" ]; then
-        SERVER_PID=$(cat "$OPM_PID_FILE")
-        if "$BUSYBOX" kill -0 "$SERVER_PID" >/dev/null 2>&1; then
+        OTHER_OPM_PID=$(cat "$OPM_PID_FILE")
+        if "$BUSYBOX" kill -0 "$OTHER_OPM_PID" >/dev/null 2>&1; then
             return 0 # Server is running
         else
             # PID file exists but process is not running
@@ -399,29 +491,11 @@ is_server_running() {
     fi
 }
 
-# Function to initialize OPM (run init.sh in each package)
-opm_init() {
-    "$BUSYBOX" echo "Running opm init..."
-    for package_dir in "$OPM_DATA"/*; do
-        if [ -d "$package_dir" ]; then
-            INIT_SCRIPT="$package_dir/init.sh"
-            if [ -f "$INIT_SCRIPT" ]; then
-                "$BUSYBOX" echo "Running init script for package $("$BUSYBOX" basename "$package_dir")"
-                PACKAGEDIR="$package_dir" "$BUSYBOX" ash "$INIT_SCRIPT"
-            fi
-        fi
-    done
-    "$BUSYBOX" echo "opm init completed."
-}
-
 execute_command() {
     COMMAND="$1"
     shift
 
     case "$COMMAND" in
-        init)
-            opm_init
-            ;;
         help)
             usage
             ;;
@@ -474,13 +548,23 @@ execute_command() {
             fi
             search_packages "$QUERY"
             ;;
-        reinstall|upgrade)
+        reinstall)
             PACKAGE="$1"
+            KEEP_CONFIG="false"
             if [ -z "$PACKAGE" ]; then
-                "$BUSYBOX" echo "Please specify a package to reinstall or upgrade."
+                "$BUSYBOX" echo "Please specify a package to reinstall."
                 return 1
             fi
-            reinstall_package "$PACKAGE"
+            reinstall_package "$PACKAGE" "$KEEP_CONFIG"
+            ;;
+        upgrade)
+            PACKAGE="$1"
+            KEEP_CONFIG="true"
+            if [ -z "$PACKAGE" ]; then
+                "$BUSYBOX" echo "Please specify a package to upgrade."
+                return 1
+            fi
+            reinstall_package "$PACKAGE" "$KEEP_CONFIG"
             ;;
         show)
             PACKAGE="$1"
@@ -489,6 +573,30 @@ execute_command() {
                 return 1
             fi
             show_package "$PACKAGE"
+            ;;
+        start)
+            PACKAGE="$1"
+            if [ -z "$PACKAGE" ]; then
+                "$BUSYBOX" echo "Please specify a package to start."
+                return 1
+            fi
+            start_service "$PACKAGE"
+            ;;
+        enable)
+            PACKAGE="$1"
+            if [ -z "$PACKAGE" ]; then
+                "$BUSYBOX" echo "Please specify a package to enable as a service."
+                return 1
+            fi
+            enable_service "$OPM_DATA/$PACKAGE"
+            ;;
+        disable)
+            SERVICE_NAME="$1"
+            if [ -z "$SERVICE_NAME" ]; then
+                "$BUSYBOX" echo "Please specify a service to disable."
+                return 1
+            fi
+            disable_service "$SERVICE_NAME"
             ;;
         postinstall)
             PACKAGE="$1"
@@ -504,86 +612,215 @@ execute_command() {
             ;;
     esac
 
-    # Indicate command completion
+    # If this doesnt show up, something went horribly wrong.
+    "$BUSYBOX" echo ""
     "$BUSYBOX" echo "Command completed."
 }
 
-# Server code
-server_loop() {
-    while true; do
-        if read -r command; then
-            case "$command" in
-                exit)
-                    "$BUSYBOX" echo "Shutting down OPM server..."
-                    break
-                    ;;
-                *)
-                    # Execute the command and send output to the client
-                    execute_command $command
-                    if [ $? -ne 0 ]; then
-                        "$BUSYBOX" echo "ERROR: Command failed."
-                    fi
-                    ;;
-            esac
+start_services() {
+    echo "Starting all enabled services..."
+    for package_dir in "$OPM_DATA"/*; do
+        service="$OPM_ROOT/services/$($BUSYBOX basename $package_dir)"
+        if [ -f "$service" ]; then
+            echo "Starting service: $("$BUSYBOX" basename "$service")"
+            PACKAGEDIR=${package_dir} "$BUSYBOX" ash "$service" || echo "Error starting service $("$BUSYBOX" basename "$service")"
         fi
     done
-
-    # Clean up
-    "$BUSYBOX" rm -f "$OPM_PID_FILE"
-    "$BUSYBOX" rm -f "$OPM_FIFO_IN" "$OPM_FIFO_OUT"
-    "$BUSYBOX" echo "OPM server shut down."
-    exit 0
 }
 
-# Client code
-client() {
-    if ! is_server_running; then
-        start_server
-        "$BUSYBOX" sleep 1
-    fi
-
-    "$BUSYBOX" echo "$COMMAND $*" > "$OPM_FIFO_IN"
-
-    while read -r line; do
-        "$BUSYBOX" echo "$line"
-        if [ "$line" = "Command completed." ] || [[ "$line" == ERROR:* ]]; then
-            break
+start_service() {
+    for package_dir in "$OPM_DATA"/*; do
+        service="$OPM_ROOT/services/$($BUSYBOX basename $package_dir)"
+        if [ -f "$service" ]; then
+            echo "Starting service: $("$BUSYBOX" basename "$service")"
+            PACKAGEDIR=${package_dir} "$BUSYBOX" ash "$service" || echo "Error starting service $("$BUSYBOX" basename "$service")"
         fi
-    done < "$OPM_FIFO_OUT"
+    done
 }
 
-# Main entry point
-if [ "$1" = "server" ]; then
-    # Server mode
+# Error handling
+trap 'echo "Error occurred at line $LINENO with exit code $?." | "$BUSYBOX" tee -a "$OPM_ROOT/opm.err"; exit 1' ERR
 
-    # Remove any existing FIFO files
-    [ -p "$OPM_FIFO_IN" ] && "$BUSYBOX" rm "$OPM_FIFO_IN"
-    [ -p "$OPM_FIFO_OUT" ] && "$BUSYBOX" rm "$OPM_FIFO_OUT"
+# Function to check if another opm instance is running
+is_opm_running() {
+    if [ -f "$OPM_PID_FILE" ]; then
+        OTHER_OPM_PID=$("$BUSYBOX" cat "$OPM_PID_FILE")
+        if "$BUSYBOX" kill -0 "$OTHER_OPM_PID" >/dev/null 2>&1; then
+            return 0 # Another opm instance is running
+        else
+            # PID file exists but process is not running
+            "$BUSYBOX" rm "$OPM_PID_FILE"
+            echo "WARNING: The previous opm instance crashed. This is a bug, so bug oddbyte about it."
+            return 1 # No other opm instances are running, but the previous one probably crashed
+        fi
+    else
+        return 1 # PID file does not exist, server not running
+    fi
+}
 
-    # Create FIFO files
-    "$BUSYBOX" mkfifo "$OPM_FIFO_IN"
-    "$BUSYBOX" mkfifo "$OPM_FIFO_OUT"
+# Function to handle user input for killing or waiting
+handle_existing_process() {
+    echo "Warning: Another process is already running with PID $OTHER_OPM_PID."
 
-    # Redirect stdin and stdout to the FIFO files
-    exec <"$OPM_FIFO_IN"
-    exec >"$OPM_FIFO_OUT" 2>&1
+    echo "What would you like to do?"
+    echo "1) Kill the existing process (Warning: Potential data loss or corruption)"
+    echo "2) Wait for the existing process to finish"
 
-    # Run opm init before starting the server loop
-    opm_init
+    read -p "Enter your choice (1 or 2): " choice
 
-    # Now run the server loop
-    server_loop
-    exit 0
+    case "$choice" in
+        1)
+            echo "Killing process $OTHER_OPM_PID..."
+            "$BUSYBOX" kill -9 "$OTHER_OPM_PID"
+            "$BUSYBOX" rm -f "$OPM_PID_FILE"
+            ;;
+        2)
+            "$BUSYBOX" echo "Waiting for process $OTHER_OPM_PID to finish..."
+            while kill -0 "$OTHER_OPM_PID" >/dev/null 2>&1; do
+                "$BUSYBOX" sleep 1
+            done
+            echo "Process $OTHER_OPM_PID has finished."
+            ;;
+        *)
+            echo "Invalid choice. Please enter 1 or 2."
+            handle_existing_process
+            ;;
+    esac
+}
+
+# The jumping off point, calls other functions.
+execute_command() {
+    case "$COMMAND" in
+        help)
+            usage
+            ;;
+        install|add|i)
+            PACKAGE="$1"
+            if [ -z "$PACKAGE" ]; then
+                "$BUSYBOX" echo "Please specify a package to install."
+                return 1
+            fi
+            install_package "$PACKAGE"
+            ;;
+        remove|uninstall|delete|rm)
+            PACKAGE="$1"
+            if [ -z "$PACKAGE" ]; then
+                "$BUSYBOX" echo "Please specify a package to remove."
+                return 1
+            fi
+            remove_package "$PACKAGE"
+            ;;
+        repos)
+            list_repos
+            ;;
+        addrepo)
+            REPO_URL="$1"
+            if [ -z "$REPO_URL" ]; then
+                "$BUSYBOX" echo "Please specify a repository URL."
+                return 1
+            fi
+            add_repo "$REPO_URL"
+            ;;
+        rmrepo)
+            REPO_URL="$1"
+            if [ -z "$REPO_URL" ]; then
+                "$BUSYBOX" echo "Please specify a repository URL."
+                return 1
+            fi
+            remove_repo "$REPO_URL"
+            ;;
+        list)
+            list_packages
+            ;;
+        update)
+            update
+            ;;
+        search)
+            QUERY="$1"
+            if [ -z "$QUERY" ]; then
+                "$BUSYBOX" echo "Please specify a search query."
+                return 1
+            fi
+            search_packages "$QUERY"
+            ;;
+        reinstall)
+            PACKAGE="$1"
+            KEEP_CONFIG="false"
+            if [ -z "$PACKAGE" ]; then
+                "$BUSYBOX" echo "Please specify a package to reinstall."
+                return 1
+            fi
+            reinstall_package "$PACKAGE" "$KEEP_CONFIG"
+            ;;
+        upgrade)
+            PACKAGE="$1"
+            KEEP_CONFIG="true"
+            if [ -z "$PACKAGE" ]; then
+                "$BUSYBOX" echo "Please specify a package to upgrade."
+                return 1
+            fi
+            reinstall_package "$PACKAGE" "$KEEP_CONFIG"
+            ;;
+        show)
+            PACKAGE="$1"
+            if [ -z "$PACKAGE" ]; then
+                "$BUSYBOX" echo "Please specify a package to show."
+                return 1
+            fi
+            show_package "$PACKAGE"
+            ;;
+        start)
+            PACKAGE="$1"
+            if [ -z "$PACKAGE" ]; then
+                "$BUSYBOX" echo "Please specify a package to start."
+                return 1
+            fi
+            start_service "$PACKAGE"
+            ;;
+        enable)
+            PACKAGE="$1"
+            if [ -z "$PACKAGE" ]; then
+                "$BUSYBOX" echo "Please specify a package to enable as a service."
+                return 1
+            fi
+            enable_service "$OPM_DATA/$PACKAGE"
+            ;;
+        disable)
+            SERVICE_NAME="$1"
+            if [ -z "$SERVICE_NAME" ]; then
+                "$BUSYBOX" echo "Please specify a service to disable."
+                return 1
+            fi
+            disable_service "$SERVICE_NAME"
+            ;;
+        postinstall)
+            PACKAGE="$1"
+            if [ -z "$PACKAGE" ]; then
+                "$BUSYBOX" echo "Please specify a package for post-installation."
+                return 1
+            fi
+            postinstall_package "$PACKAGE"
+            ;;
+        *)
+            "$BUSYBOX" echo "Unknown command: $COMMAND"
+            usage
+            ;;
+    esac
+
+    # Indicate command completion. If this doesnt show up, something has gone horribly wrong, and you should bug oddbyte about it.
+    "$BUSYBOX" echo "Command completed."
+}
+
+# Redirect stderr to the log file
+exec 2>> "$OPM_ROOT/opm.err"
+
+# Prepare $COMMAND, because execute_command needs something to be there, if there's no arguments, we just set it to "help" and call it a day.
+if [ $# -eq 0 ]; then
+    COMMAND="help"
 else
-    # Client mode
     COMMAND="$1"
     shift
-
-    if [ -z "$COMMAND" ]; then
-        usage
-        exit 0
-    fi
-
-    client "$@"
-    exit 0
 fi
+
+# Main entry point of opm
+execute_command "$COMMAND" "$@"
