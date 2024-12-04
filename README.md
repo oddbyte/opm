@@ -7,6 +7,12 @@ curl -sSL opm.oddbyte.dev/opminstall.sh > opminstall.sh && sh opminstall.sh
 ```
 You can use `bash`, `sh`, or even `busybox ash` for the installer. Just replace sh with your desired shell.
 You must keep it as a file, because it tries to read from stdin. So using a pipe to pipe the output from curl to sh or bash will break the installer. However, there is nothing stopping you from using `rm` to delete the installer script after.
+
+## Features
+- Runs on busybox, so it should run the same on all devices
+- Custom repo support (Please DM me to get the backend software to run your own)
+- Does not require root. All packages in the official repo do not require root to run.
+
 ## Usage
 ```
 opm@oddbyte:~$ opm help
