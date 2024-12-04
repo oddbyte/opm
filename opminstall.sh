@@ -58,7 +58,7 @@ OPM_DATA="$OPM_ROOT/data"
 "$BUSYBOX" mkdir -p "$OPM_BIN/busybox"
 
 # Move the downloaded BusyBox to the busybox folder
-mv "$BUSYBOX" "$OPM_BIN/busybox/"
+"$BUSYBOX" mv "$BUSYBOX" "$OPM_BIN/busybox/"
 
 # Set the path to the new BusyBox
 BUSYBOX="$OPM_BIN/busybox/busybox"
@@ -136,4 +136,8 @@ fi
 "$BUSYBOX" echo "====================================="
 "$BUSYBOX" echo "       OPM Installation Complete     "
 "$BUSYBOX" echo "====================================="
-"$BUSYBOX" echo "Please restart your terminal or run 'source ~/.profile' to start using OPM."
+"$BUSYBOX" echo ""
+
+source ~/.profile
+
+"$BUSYBOX" echo "~/.profile sourced, you can now use opm!"
