@@ -19,7 +19,7 @@ You must keep it as a file, because it tries to read from stdin. So using a pipe
 
 ## Features
 - Runs on busybox, so it should run the same on all devices
-- Custom repo support (Please DM me to get the backend software to run your own)
+- Custom repo support
 - Does not require root. All packages in the official repo do not require root to run.
 
 ## Usage
