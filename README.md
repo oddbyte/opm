@@ -1,4 +1,9 @@
-# Odd Package Manager - A rootless package manager, made to work with as little as possible
+# Odd Package Manager
+A lightweight package manager for odd systems
+
+This package manager is completely rootless
+
+View the repository on the opm website, https://opm.oddbyte.dev
 
 # WARNING
 ### THIS IS *ALPHA* SOFTWARE. EXPECT BREAKING CHANGES TO OCCUR WITHOUT NOTICE.
