@@ -1,0 +1,10 @@
+-- OPM PACKAGE BEGIN --
+packagename: "example"
+type: "script"
+interpreter: "{{OPM_BIN_DIR}}/busybox/busybox ash"
+archivetype: "zip"
+version: "1.0.0"
+depends: "core"
+displayname: "Example Package"
+path: "examplebin.sh"
+description: "This is a example package."
