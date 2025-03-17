@@ -1,8 +1,0 @@
-# :opm-start:
-# :opm packagename: example
-# :opm packagedisplay: Example Package
-# :opm addtopath: examplebin.sh
-# :opm packagever: 1.0.0
-# :opm packagedesc: This is a example package.
-# :opm depends: core
-# :opm-dynamic:
